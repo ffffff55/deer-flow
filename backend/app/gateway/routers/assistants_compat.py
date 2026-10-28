@@ -86,11 +86,19 @@ def _list_assistants() -> list[AssistantResponse]:
     return assistants
 
 
+def _metadata_matches(metadata: dict[str, Any], requested: dict[str, Any]) -> bool:
+    """Return True when *metadata* contains every requested key at an equal value."""
+    return all(key in metadata and metadata[key] == value for key, value in requested.items())
+
+
 @router.post("/search", response_model=list[AssistantResponse])
 async def search_assistants(body: AssistantSearchRequest | None = None) -> list[AssistantResponse]:
     """Search assistants.
 
-    Returns all registered assistants (lead_agent + custom agents from config).
+    Returns registered assistants (lead_agent + custom agents from config).
+    A non-empty ``metadata`` object keeps only assistants whose metadata
+    contains every requested key with an exactly equal value. Empty, null,
+    or omitted ``metadata`` does not filter.
     """
     # _list_assistants reads custom agents through the sync agent store (file IO
     # or a DB round trip), so keep it off the event loop.
@@ -100,6 +108,9 @@ async def search_assistants(body: AssistantSearchRequest | None = None) -> list[
         assistants = [a for a in assistants if a.graph_id == body.graph_id]
     if body and body.name:
         assistants = [a for a in assistants if body.name.lower() in a.name.lower()]
+    if body and body.metadata:
+        requested_metadata = body.metadata
+        assistants = [assistant for assistant in assistants if _metadata_matches(assistant.metadata, requested_metadata)]
 
     offset = body.offset if body else 0
     limit = body.limit if body else 10
