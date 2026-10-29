@@ -10,6 +10,8 @@ export const MAX_EXTENSION_MENTIONS = 16;
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
 const bounded = (value: unknown, limit: number): value is string =>
   typeof value === "string" && !!value.trim() && value.length <= limit;
+const boundMentionQuery = (query: string) =>
+  Array.from(query).slice(0, 256).join("");
 
 export function extensionMentionId(ref: ExtensionMention) {
   return JSON.stringify([ref.namespace, ref.provider, ref.id]);
@@ -81,7 +83,7 @@ export async function searchExtensionMentions(
         const candidates = await Promise.race([
           Promise.resolve().then(() => {
             abort.signal.throwIfAborted();
-            return provider.search(query.slice(0, 256), {
+            return provider.search(boundMentionQuery(query), {
               ...context,
               namespace: contribution.namespace,
               settings: contribution.settings,
