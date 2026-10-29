@@ -13,7 +13,7 @@ import type { LoadedContribution } from "@/core/extensions/registry";
 
 const entry = (
   namespace: string,
-  search: (...args: never[]) => unknown,
+  search: (query: string) => unknown,
 ): LoadedContribution => ({
   namespace,
   module: namespace,
@@ -75,6 +75,28 @@ describe("extension mentions", () => {
       },
     ]);
     expect(result.failed).toBe(true);
+  });
+  it("keeps a boundary emoji whole when bounding the provider query", async () => {
+    const query = "a".repeat(255) + "😀tail";
+    let received = "";
+    await searchExtensionMentions(
+      [
+        entry("team", (value) => {
+          received = value;
+          return [];
+        }),
+      ],
+      query,
+      {
+        locale: "en-US",
+        threadId: "thread",
+        signal: new AbortController().signal,
+      },
+    );
+    const bounded = "a".repeat(255) + "😀";
+    expect(received).toBe(bounded);
+    expect(received.charCodeAt(received.length - 1)).not.toBe(0xd83d);
+    expect(received.endsWith("tail")).toBe(false);
   });
   it("settles even if a provider ignores cancellation", async () => {
     const abort = new AbortController();
