@@ -19,6 +19,11 @@ This section accumulates work toward the **2.3.0** milestone
 
 ### Fixed
 
+- **frontend:** A confirmed background-task cancellation can no longer be
+  overwritten by a detail poll that started earlier. The expanded task card now
+  keeps its terminal `cancelled` state and stops polling instead of briefly
+  returning to `working`. ([issue #7177](https://github.com/bytedance/deer-flow/issues/7177))
+
 - **projects:** The trash retention sweep no longer deletes live document
   originals when the data directory, `users/`, a user's directory or a
   user's `projects/` is a symlink. It protected each document by its resolved
