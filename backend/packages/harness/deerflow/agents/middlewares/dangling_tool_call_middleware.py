@@ -48,6 +48,19 @@ def _valid_tool_call_id(tool_call_id: object) -> bool:
     return isinstance(tool_call_id, str) and bool(tool_call_id.strip())
 
 
+def _tool_call_ids_match(original: object, result_id: object) -> bool:
+    """Whether a result id answers the call's original id.
+
+    A missing id is ``None`` on the call (JSON null) and ``""`` on a normally
+    constructed ``ToolMessage`` — ``tool_call_id`` is typed ``str``, so a
+    middleware that answers the call cannot store ``None``. Those two spellings
+    are the same "no id". Any other id, including whitespace, matches only itself.
+    """
+    if original == result_id:
+        return True
+    return original in (None, "") and result_id in (None, "")
+
+
 def _tool_call_name(tool_call: dict) -> object:
     """Return a call's declared name, mirroring _message_tool_calls' raw-payload fallback."""
     name = tool_call.get("name")
@@ -107,7 +120,9 @@ def _claim_synthetic_id(open_calls: list[dict], result: ToolMessage, positional:
     """Consume the open malformed call that ``result`` answers, returning its new id.
 
     Malformed originals are all equally empty, so they cannot identify their own
-    result; ``open_calls`` is already scoped to the issuing turn. Within that turn the
+    result; ``None`` and ``""`` are the same missing original, which is how a
+    middleware-built ``ToolMessage(tool_call_id="")`` claims a JSON-null call.
+    ``open_calls`` is already scoped to the issuing turn. Within that turn the
     result's name narrows the candidates, and only a *forced* choice is taken:
 
     * one compatible call — its name, or being the turn's only call, identifies it;
@@ -123,7 +138,7 @@ def _claim_synthetic_id(open_calls: list[dict], result: ToolMessage, positional:
     Returning ``None`` leaves the result malformed for the orphan pass to drop, which is
     what an unattributable result gets today — better than inventing a pairing.
     """
-    candidates = [position for position, entry in enumerate(open_calls) if entry["original"] == result.tool_call_id and _names_can_pair(entry["name"], result.name)]
+    candidates = [position for position, entry in enumerate(open_calls) if _tool_call_ids_match(entry["original"], result.tool_call_id) and _names_can_pair(entry["name"], result.name)]
     if not candidates or (len(candidates) > 1 and not positional):
         return None
     return open_calls.pop(candidates[0])["synthetic"]

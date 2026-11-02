@@ -952,6 +952,33 @@ class TestMalformedToolCallIdRecovery:
         assert patched[1].content == "REAL RESULT"
         assert patched[1].tool_call_id == patched[0].tool_calls[0]["id"]
 
+    def test_none_id_call_keeps_middleware_tool_message_with_empty_id(self):
+        """A normally built result for a null id follows the call to its synthetic id.
+
+        ``ToolMessage.tool_call_id`` is ``str``, so the only result a middleware can
+        build for an id-less call stores ``""``. That must claim the call whose
+        original id is ``None`` (JSON null) instead of being dropped as an orphan
+        and replaced by the interrupted placeholder (#7836).
+        """
+        mw = DanglingToolCallMiddleware()
+        msgs = [
+            AIMessage(content="", tool_calls=[{"name": "write_file", "id": None, "args": {"path": "a.md"}}]),
+            ToolMessage(
+                content="Error: read the file before writing it",
+                tool_call_id="",
+                name="write_file",
+            ),
+        ]
+
+        patched = mw._build_patched_messages(msgs)
+
+        assert patched is not None
+        assert len(patched) == 2
+        assert isinstance(patched[1], ToolMessage)
+        assert patched[1].content == "Error: read the file before writing it"
+        assert patched[1].tool_call_id == patched[0].tool_calls[0]["id"]
+        assert patched[1].status != "error"
+
     def test_dangling_call_does_not_consume_a_later_turns_result(self):
         """A result answers the turn that issued it, never an earlier dangling call.
 
