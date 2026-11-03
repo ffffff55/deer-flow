@@ -167,6 +167,10 @@ def test_powershell_executes_mapped_metacharacters(powershell, tmp_path, directo
 
 @pytest.mark.parametrize("shell_name", ["sh", "cmd.exe"])
 def test_quoted_paths_still_execute_in_other_shells(mounted, monkeypatch, shell_name):
+    # cmd.exe via WSL interop is not a native shell for this test: the Linux cwd
+    # becomes a UNC path that CMD rejects before path-mapping can be validated.
+    if shell_name == "cmd.exe" and os.name != "nt":
+        pytest.skip("native Windows CMD is required; WSL interop cmd.exe is not a native shell for this test")
     shell = shutil.which(shell_name)
     if shell is None or (os.name == "nt" and shell_name == "sh"):
         pytest.skip(f"native {shell_name} is unavailable")
