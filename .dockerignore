@@ -62,6 +62,16 @@ docker/
 skills/
 frontend/.next
 frontend/node_modules
+# Unit tests are not image inputs. The dev target bind-mounts src/ and public/
+# only. `next build` still type-checks them when they are in the context,
+# because frontend/tsconfig.json includes **/*.ts, and some tests import
+# fixtures outside frontend/ (bookmarks.test.ts imports
+# examples/.../static/dist/index.mjs). examples/ and dist/ are excluded, and
+# the Dockerfile only copies frontend/, so that import fails the image build
+# (#7995). Keep the tests in tsconfig so local and CI `pnpm typecheck` still
+# cover them on a full checkout. The root `tests/` pattern does not match
+# frontend/tests.
+frontend/tests
 backend/.venv
 backend/htmlcov
 backend/.coverage

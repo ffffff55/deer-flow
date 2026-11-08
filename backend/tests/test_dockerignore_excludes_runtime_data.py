@@ -199,3 +199,41 @@ def test_build_inputs_are_still_included(build_input: str) -> None:
 def test_files_the_extension_manager_refuses_stay_out_of_snapshots(name: str) -> None:
     patterns = _ignore_patterns()
     assert _is_excluded(patterns, f"{SNAPSHOT_ROOT}/{name}"), f"extension snapshots are re-included wholesale; exclude {name} after the re-inclusion"
+
+
+# `next build` type-checks the frontend tsconfig project (`include` is `**/*.ts`).
+# The image copies `frontend/` only and excludes `examples/`, so a unit test that
+# imports a fixture from `examples/` fails the production image build (#7995).
+# Tests are not inputs to any image target — dev bind-mounts `src/` and `public/` —
+# while local and CI `pnpm typecheck` still include them through tsconfig.
+FRONTEND_UNIT_TEST = "frontend/tests/unit/core/extensions/bookmarks.test.ts"
+BOOKMARKS_FIXTURE = "examples/deerflow-extension-bookmarks/deerflow_extension_bookmarks/static/dist/index.mjs"
+
+
+def test_frontend_unit_tests_stay_out_of_the_image_context() -> None:
+    patterns = _ignore_patterns()
+    assert _is_excluded(patterns, FRONTEND_UNIT_TEST), "frontend unit tests are type-checked by next build; exclude frontend/tests so imports of examples/ do not fail the image build"
+    assert not _is_excluded(patterns, "frontend/src/env.js")
+    assert not _is_excluded(patterns, "frontend/tsconfig.json")
+    assert not _is_excluded(patterns, "frontend/package.json")
+    # `tests/` is anchored at the context root, so it does not cover frontend/tests.
+    assert not _pattern_matches("tests", FRONTEND_UNIT_TEST)
+
+
+def _json_array(text: str, key: str) -> str:
+    match = re.search(rf'"{key}"\s*:\s*\[(.*?)\]', text, flags=re.DOTALL)
+    assert match is not None, f"frontend/tsconfig.json is missing {key}"
+    return match.group(1)
+
+
+def test_frontend_typecheck_still_includes_unit_tests_on_a_full_checkout() -> None:
+    """Image-context exclusion must not drop unit tests from `pnpm typecheck`."""
+    text = (REPO_ROOT / "frontend/tsconfig.json").read_text(encoding="utf-8")
+    include = _json_array(text, "include")
+    assert '"**/*.ts"' in include
+    assert '"**/*.tsx"' in include
+    exclude = _json_array(text, "exclude")
+    assert "tests" not in exclude
+    source = (REPO_ROOT / FRONTEND_UNIT_TEST).read_text(encoding="utf-8")
+    assert BOOKMARKS_FIXTURE in source
+    assert (REPO_ROOT / BOOKMARKS_FIXTURE).is_file()
