@@ -277,6 +277,8 @@ class InputSanitizationMiddleware(AgentMiddleware[AgentState]):
         (``message_content_to_text`` treats both as text, and some IM/SDK
         clients send exactly that shape), so bare strings are collected too —
         skipping them would skip sanitization entirely for that message.
+        Empty bare strings are collected for removal only; they are not joined
+        into the extracted text.
         """
         if isinstance(content, str):
             return content, None
@@ -286,7 +288,11 @@ class InputSanitizationMiddleware(AgentMiddleware[AgentState]):
         text_blocks: list[dict | str] = []
         for block in content:
             if isinstance(block, str):
-                if not block:  # skip empty items — matches message_content_to_text behaviour
+                if not block:
+                    # No text to merge (message_content_to_text drops these too),
+                    # but record the item so _rebuild_content removes it. A
+                    # leftover "" is an untyped Chat Completions part (#8037).
+                    text_blocks.append(block)
                     continue
                 text_parts.append(block)
                 text_blocks.append(block)

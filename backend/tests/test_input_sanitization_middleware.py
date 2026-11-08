@@ -756,6 +756,48 @@ class TestWrapModelCallSpecialCases:
         assert "&lt;think&gt;" in merged
         assert processed[1] == image_block
 
+    def test_leading_empty_bare_string_is_dropped_from_list_content(self):
+        """#8037: an empty bare string must not survive beside a typed text block.
+
+        Chat Completions rejects untyped list items. ``["", {"type": "text"}]``
+        used to leave the ``""`` in place while framing only the typed block.
+        """
+        mw = _make_middleware()
+        question = {"type": "text", "text": "Please summarize the forwarded note."}
+        msg = HumanMessage(content=["", question], id="msg-8037")
+        request = _make_request([msg])
+        captured = []
+
+        mw.wrap_model_call(request, lambda req: captured.append(req) or "ok")
+
+        processed = captured[0].messages[0].content
+        assert isinstance(processed, list)
+        assert processed == [
+            {
+                "type": "text",
+                "text": f"{_USER_INPUT_BEGIN}\nPlease summarize the forwarded note.\n{_USER_INPUT_END}",
+            }
+        ]
+        assert all(isinstance(item, dict) and isinstance(item.get("type"), str) for item in processed)
+
+    def test_nonempty_bare_string_and_typed_text_collapse_to_one_block(self):
+        """Mixed non-empty bare string + typed text stays one typed block (#4668)."""
+        mw = _make_middleware()
+        question = {"type": "text", "text": "Please summarize the forwarded note."}
+        msg = HumanMessage(content=["Hi,", question], id="msg-8037-ok")
+        request = _make_request([msg])
+        captured = []
+
+        mw.wrap_model_call(request, lambda req: captured.append(req) or "ok")
+
+        processed = captured[0].messages[0].content
+        assert processed == [
+            {
+                "type": "text",
+                "text": f"{_USER_INPUT_BEGIN}\nHi,\nPlease summarize the forwarded note.\n{_USER_INPUT_END}",
+            }
+        ]
+
     def test_already_wrapped_no_override(self):
         mw = _make_middleware()
         already = _check_user_content("Hello")
